@@ -1,95 +1,66 @@
-import express, { Request, Response } from "express";
-import cors from "cors";
-import { Pool } from "pg";
-import dotenv from "dotenv";
+import express from 'express';
+import cors from 'cors';
+import dotenv from 'dotenv';
+// import userRoutes from './routes/user.routes';
+import { pool } from './config/db'; 
+import venueRoutes from './routes/venueRoutes';
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 8080;
+const PORT = 8080;
 
-// Middleware
+
+
+// Global Middleware
 app.use(cors());
-app.use(express.json()); // Allows your server to parse incoming JSON payloads
+app.use(express.json());
+// app.get('/', (req, res) => {
+//   res.json({
+//     status: "online",
+//     message: "Welcome to the KidVenture API Gateway!",
+//     endpoints: ["/venues"]
+//   });
+// });
 
-// 1. Establish the Native PostgreSQL Connection Pool
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-});
+// Mount Modular Resource Router Paths
+// app.use('/users', userRoutes);
+app.use('/venues', venueRoutes);
 
-// Define a strict TypeScript interface to type-check your database results
-interface UserRow {
-  id: number;
-  email: string;
-  name: string | null;
-  created_at: Date;
-}
-
-// 2. Self-Healing Database Initialization Script
-// This checks for your table automatically on startup so you don't need external database tools.
+// Self-Healing Table Verification Strategy
 const initDatabase = async () => {
-  const createTableQuery = `
-    CREATE TABLE IF NOT EXISTS "User" (
+  const createTablesQuery = `
+    CREATE TABLE IF NOT EXISTS "Venue" (
       id SERIAL PRIMARY KEY,
-      email VARCHAR(255) UNIQUE NOT NULL,
-      name VARCHAR(255),
+      name VARCHAR(255) NOT NULL,
+      description TEXT NOT NULL,
+      category VARCHAR(50) NOT NULL,      -- Stores VenueCategory enum string
+      location JSONB NOT NULL,             -- Stores complete Location interface object
+      contact JSONB NOT NULL,              -- Stores complete ContactInfo interface object
+      images TEXT[] NOT NULL,              -- Stores string array of image URLs
+      rating NUMERIC(3, 2) DEFAULT 0.0,
+      "reviewCount" INT DEFAULT 0,
+      "priceRange" VARCHAR(20) NOT NULL,   -- Stores PriceRange enum string
+      "ageGroups" TEXT[] NOT NULL,         -- Stores array of AgeGroup enum strings
+      amenities TEXT[] NOT NULL,
+      activities JSONB NOT NULL,           -- Stores array of Activity interface objects
+      "operatingHours" JSONB NOT NULL,     -- Stores complete OperatingHours interface object
+      "isPartner" BOOLEAN DEFAULT false,
+      featured BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
   `;
   try {
-    await pool.query(createTableQuery);
-    console.log('✅ Database Connection Stable: "User" table verified.');
+    await pool.query(createTablesQuery);
+    console.log('✅ Database Schema Synchronized: Venue parameters mapped.');
   } catch (error) {
-    console.error("❌ Database initialization failed:", error);
+    console.error('❌ Database initialization failed:', error);
   }
 };
 
+
 initDatabase();
 
-// 3. GET Endpoint: Fetch all users from PostgreSQL
-app.get("/users", async (req: Request, res: Response) => {
-  try {
-    const result = await pool.query<UserRow>(
-      'SELECT * FROM "User" ORDER BY id ASC;',
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Database selection error:", error);
-    res.status(500).json({ error: "Failed to fetch users from database" });
-  }
-});
-
-// 4. POST Endpoint: Create a new user with query parameterization (prevents SQL injection)
-app.post("/users", async (req: Request, res: Response) => {
-  const { email, name } = req.body;
-
-  if (!email) {
-    res.status(400).json({ error: "The email property is required." });
-    return;
-  }
-
-  try {
-    const queryText =
-      'INSERT INTO "User"(email, name) VALUES($1, $2) RETURNING *;';
-    const values = [email, name || null];
-
-    const result = await pool.query<UserRow>(queryText, values);
-    res.status(201).json(result.rows[0]); // Return the single newly created row item
-  } catch (error: any) {
-    console.error("Database insertion error:", error);
-
-    // PostgreSQL error code '23505' represents a Unique Constraint Violation
-    if (error.code === "23505") {
-      res.status(400).json({
-        error: "A user account with this email address already exists.",
-      });
-    } else {
-      res.status(500).json({ error: "Internal server database error." });
-    }
-  }
-});
-
-// Start listening for network traffic
 app.listen(PORT, () => {
-  console.log(`🚀 Clean Native Backend active at http://localhost:${PORT}`);
+  console.log('🚀 Clean Native Backend active at http://localhost:8080');
 });
